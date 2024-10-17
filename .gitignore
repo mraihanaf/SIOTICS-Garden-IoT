@@ -1,0 +1,13 @@
+# Node.js
+node_modules/
+dist/
+*.env
+
+# PlatformIO
+.pio/
+.vscode/
+build/
+
+# MacOS/Windows/Linux files
+.DS_Store
+Thumbs.db
