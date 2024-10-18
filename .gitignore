@@ -11,3 +11,4 @@ build/
 # MacOS/Windows/Linux files
 .DS_Store
 Thumbs.db
+dist/
