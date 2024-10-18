@@ -1,0 +1,6 @@
+it.todo("make a http server")
+it.todo("make a mqtt broker")
+it.todo("connect to database")
+it.todo("save the logs in the database")
+it.todo("watering timer set with mqtt")
+it.todo("battery monitoring from the web")
