@@ -1,0 +1,27 @@
+{
+    "name": "server",
+    "version": "1.0.0",
+    "description": "All in one web & mqtt server for siotics-garden-iot",
+    "main": "./src/index.ts",
+    "author": "mraihanaf <mraihanaf0@gmail.com>",
+    "license": "MIT",
+    "scripts": {
+        "test": "npx jest",
+        "build": "npx tsc",
+        "dev": "npx nodemon ./src/index.ts"
+    },
+    "dependencies": {
+        "aedes": "^0.51.3",
+        "express.js": "^1.0.0",
+        "pino": "^9.5.0"
+    },
+    "devDependencies": {
+        "@types/jest": "^29.5.13",
+        "jest": "^29.7.0",
+        "nodemon": "^3.1.7",
+        "pino-pretty": "^11.3.0",
+        "ts-jest": "^29.2.5",
+        "ts-node": "^10.9.2",
+        "typescript": "^5.6.3"
+    }
+}
