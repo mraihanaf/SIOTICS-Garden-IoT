@@ -1,0 +1,18 @@
+{
+    "name": "garden-iot",
+    "version": "1.0.0",
+    "repository": "https://github.com/siotics/SIOTICS-Garden-IoT",
+    "license": "MIT",
+    "workspaces": [
+        "apps/*"
+    ],
+    "private": "true",
+    "scripts": {
+        "prepare": "husky",
+        "format": "npx prettier . --write"
+    },
+    "devDependencies": {
+        "husky": "^9.1.6",
+        "prettier": "^3.3.3"
+    }
+}

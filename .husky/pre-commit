@@ -1,0 +1,3 @@
+yarn workspaces run test
+yarn run format
+git update-index --again

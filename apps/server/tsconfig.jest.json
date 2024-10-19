@@ -1,0 +1,17 @@
+{
+    "exclude": ["dist", "node_modules"],
+    "compilerOptions": {
+        "target": "ESNext",
+        "module": "NodeNext",
+        "rootDir": "./",
+        "moduleResolution": "NodeNext",
+        "outDir": "./dist",
+        "esModuleInterop": true,
+        "forceConsistentCasingInFileNames": true,
+        "strict": true,
+        "allowUnusedLabels": false,
+        "allowUnreachableCode": false,
+        "skipLibCheck": true,
+        "types": ["jest"]
+    }
+}
