@@ -1,0 +1,5 @@
+node_modules
+README.md
+esp32-firmware
+.gitignore
+yarn.lock

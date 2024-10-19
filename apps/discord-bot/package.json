@@ -1,0 +1,20 @@
+{
+    "name": "discord-bot",
+    "version": "1.0.0",
+    "description": "Discord bot for siotics-garden-iot",
+    "main": "src/index.ts",
+    "author": "mraihanaf <mraihanaf0@gmail.com>",
+    "license": "MIT",
+    "scripts": {
+        "test": "echo no test :D",
+        "dev": "nodemon ./src/index.ts"
+    },
+    "dependencies": {
+        "discord.js": "^14.16.3",
+        "pino": "^9.5.0"
+    },
+    "devDependencies": {
+        "ts-node": "^10.9.2",
+        "typescript": "^5.6.3"
+    }
+}
