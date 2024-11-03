@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>ESP32 Monitor</title>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                margin: 20px;
+                max-width: 800px;
+                margin: 0 auto;
+                padding: 20px;
+            }
+            #status {
+                padding: 10px;
+                margin-bottom: 20px;
+                border-radius: 4px;
+                transition: all 0.3s ease;
+            }
+            .connected {
+                background-color: #dff0d8;
+                color: #3c763d;
+            }
+            .disconnected {
+                background-color: #f2dede;
+                color: #a94442;
+            }
+            .device-card {
+                border: 1px solid #ddd;
+                padding: 15px;
+                margin-bottom: 15px;
+                border-radius: 8px;
+                transition: all 0.3s ease;
+            }
+            .device-card.active {
+                border-color: #3c763d;
+                box-shadow: 0 0 5px rgba(60, 118, 61, 0.3);
+            }
+            .device-card.inactive {
+                border-color: #a94442;
+                box-shadow: 0 0 5px rgba(169, 68, 66, 0.3);
+            }
+            .last-seen {
+                color: #666;
+                font-size: 0.9em;
+            }
+            button {
+                padding: 8px 16px;
+                margin-right: 10px;
+                cursor: pointer;
+                border-radius: 4px;
+                border: 1px solid #ddd;
+            }
+            button:hover {
+                background-color: #f5f5f5;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>ESP32 Monitor</h1>
+        <div id="status" class="disconnected">
+            Connection status: Disconnected
+        </div>
+        <div>
+            <button onclick="connect()">Connect</button>
+            <button onclick="disconnect()">Disconnect</button>
+        </div>
+        <h2>Device Status:</h2>
+        <div id="device-status"></div>
+
+        <script>
+            let client
+            const clientId = "test"
+            let heartbeatTimeout
+            const TIMEOUT_DURATION = 3000 // 10 seconds timeout
+
+            class DeviceMonitor {
+                constructor(deviceId) {
+                    this.deviceId = deviceId
+                    this.lastHeartbeat = null
+                    this.isActive = false
+                    this.render()
+                }
+
+                updateHeartbeat(data) {
+                    this.lastHeartbeat = new Date()
+                    this.isActive = true
+                    this.data = data
+                    this.render()
+                    this.startTimeout()
+                }
+
+                startTimeout() {
+                    if (this.timeoutId) clearTimeout(this.timeoutId)
+                    this.timeoutId = setTimeout(() => {
+                        this.isActive = false
+                        this.render()
+                    }, TIMEOUT_DURATION)
+                }
+
+                render() {
+                    const deviceElement =
+                        document.getElementById(`device-${this.deviceId}`) ||
+                        this.createDeviceElement()
+
+                    deviceElement.className = `device-card ${this.isActive ? "active" : "inactive"}`
+                    deviceElement.innerHTML = `
+                    <h3>Device: ${this.deviceId}</h3>
+                    <p>Status: ${this.isActive ? "Active" : "Inactive"}</p>
+                    ${
+                        this.lastHeartbeat
+                            ? `
+                        <p class="last-seen">Last seen: ${this.lastHeartbeat.toLocaleString()}</p>
+                        <p>Watering Duration: ${this.data.wateringDurationInMs / 1000} seconds</p>
+                        <p>Cron Expression: ${this.data.cronExp}</p>
+                    `
+                            : ""
+                    }
+                `
+                }
+
+                createDeviceElement() {
+                    const element = document.createElement("div")
+                    element.id = `device-${this.deviceId}`
+                    document
+                        .getElementById("device-status")
+                        .appendChild(element)
+                    return element
+                }
+
+                cleanup() {
+                    if (this.timeoutId) clearTimeout(this.timeoutId)
+                }
+            }
+
+            let deviceMonitor
+
+            function connect() {
+                client = mqtt.connect("ws://localhost:8888")
+
+                client.on("connect", () => {
+                    const statusDiv = document.getElementById("status")
+                    statusDiv.innerText =
+                        "Connection status: Connected to broker"
+                    statusDiv.className = "connected"
+                    client.subscribe(`esp/${clientId}/heartbeat`)
+
+                    // Initialize device monitor
+                    deviceMonitor = new DeviceMonitor(clientId)
+                })
+
+                client.on("message", (topic, message) => {
+                    try {
+                        const heartbeatData = JSON.parse(message.toString())
+                        deviceMonitor.updateHeartbeat(heartbeatData)
+                    } catch (e) {
+                        console.error("Error parsing message:", e)
+                    }
+                })
+
+                client.on("error", (error) => {
+                    console.error("MQTT Error:", error)
+                    const statusDiv = document.getElementById("status")
+                    statusDiv.innerText = "Connection status: Error"
+                    statusDiv.className = "disconnected"
+                })
+
+                client.on("close", () => {
+                    const statusDiv = document.getElementById("status")
+                    statusDiv.innerText =
+                        "Connection status: Disconnected from broker"
+                    statusDiv.className = "disconnected"
+                })
+            }
+
+            function disconnect() {
+                if (client) {
+                    client.end()
+                    if (deviceMonitor) {
+                        deviceMonitor.cleanup()
+                    }
+                    const statusDiv = document.getElementById("status")
+                    statusDiv.innerText = "Connection status: Disconnected"
+                    statusDiv.className = "disconnected"
+                }
+            }
+
+            // Cleanup on page unload
+            window.addEventListener("beforeunload", () => {
+                if (deviceMonitor) {
+                    deviceMonitor.cleanup()
+                }
+            })
+        </script>
+    </body>
+</html>
