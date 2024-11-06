@@ -80,6 +80,22 @@ class SetWateringCronPublisher extends WateringPublisher {
     }
 }
 
+class triggerWateringPublisher extends WateringPublisher {
+    constructor(
+        protected deviceId: string,
+        private state: "on" | "off",
+    ) {
+        super(deviceId)
+    }
+
+    public execute(broker: Aedes): void {
+        this.publish(broker, {
+            deviceId: this.deviceId,
+            action: "trigger",
+            payload: this.state,
+        })
+    }
+}
 abstract class Service {
     abstract publish(): void
 }
@@ -105,6 +121,11 @@ export class WateringService extends Service {
         this.publishers.push(
             new SetWateringCronPublisher(this.deviceId, cronExpression),
         )
+        return this
+    }
+
+    public trigger(state: "on" | "off") {
+        this.publishers.push(new triggerWateringPublisher(this.deviceId, state))
         return this
     }
 

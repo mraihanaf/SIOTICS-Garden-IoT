@@ -9,7 +9,7 @@ import db from "../utils/database"
 
 config()
 
-const DEVICE_DEFAULT = {
+export const DEVICE_DEFAULT = {
     durationInMs: 1000 * 5 * 60, // 5 mins
     cronExpression: "0 */6 * * *", // At minute 0 past every 6th hour
 }
@@ -21,6 +21,7 @@ const HOST_TOPICS = [
     /^esp\/.+\/watering\/setCron$/,
     /^esp\/.+\/system\/ota$/,
     /^esp\/.+\/system\/restart$/,
+    /^esp\/.+\/watering\/trigger$/,
 ]
 
 const CLIENT_TOPICS = [
@@ -28,6 +29,7 @@ const CLIENT_TOPICS = [
     /^esp\/.+\/heartbeat$/,
     /^esp\/.+\/system\/logs$/,
     /^esp\/.+\/watering\/logs$/,
+    /^esp\/.+\/watering\/trigger$/,
 ]
 
 /*
@@ -39,7 +41,10 @@ const CLIENT_TOPICS = [
      esp/deviceId/system/logs -> any
  */
 
-const CONNECTED_CLIENT = new Set()
+export const CONNECTED = {
+    CLIENTS: new Set(),
+    DEVICES: new Set(),
+}
 
 const broker: Aedes = new Aedes()
 const topicValidator = new TopicValidator({
@@ -61,7 +66,7 @@ class AuthError extends Error implements AuthenticateError {
 }
 
 broker.authenticate = function (client, _username, _password, callback) {
-    if (CONNECTED_CLIENT.has(client?.id))
+    if (CONNECTED.CLIENTS.has(client?.id))
         return callback(
             new AuthError(
                 "clientId already connected",
@@ -69,11 +74,20 @@ broker.authenticate = function (client, _username, _password, callback) {
             ),
             false,
         )
-    CONNECTED_CLIENT.add(client?.id)
+    if (!clientValidator.isWebsocketClient(client)) {
+        CONNECTED.DEVICES.add(client?.id)
+    }
+    CONNECTED.CLIENTS.add(client?.id)
     return callback(null, true)
 }
 
 broker.authorizePublish = function (client: Client | null, packet, callback) {
+    if (clientValidator.isWebsocketClient(client)) {
+        logger.warn(
+            `websocket client ${client?.req?.socket.remoteAddress} trying to publish message but rejected`,
+        )
+        return callback(new Error("websocket not allowed"))
+    }
     if (!topicValidator.isValidTopic(packet.topic)) {
         logger.warn("invalid topic " + packet.topic + " from " + client?.id)
         return callback(new Error("invalid topic"))
@@ -100,7 +114,8 @@ broker.authorizePublish = function (client: Client | null, packet, callback) {
 }
 
 broker.on("clientDisconnect", (client: Client) => {
-    CONNECTED_CLIENT.delete(client?.id)
+    CONNECTED.CLIENTS.delete(client?.id)
+    CONNECTED.DEVICES.delete(client?.id)
 })
 
 broker.on("publish", async (packet, client) => {
@@ -130,22 +145,10 @@ export class publishPacketHandler {
         if (packet.topic === "esp/init")
             return this.handleClientInitPublishPacket(packet)
         const parsedTopic = topicParser.parse(packet.topic)
-        if (parsedTopic.type === "watering") {
-            let deviceData = await db.getDeviceConfig(client.id)
-            if (!deviceData) {
-                deviceData = {
-                    deviceId: client.id,
-                    wateringDurationInMs: DEVICE_DEFAULT.durationInMs,
-                    cronExpression: DEVICE_DEFAULT.cronExpression,
-                }
-            }
-
-            db.addLog({
-                deviceId: client.id,
-                isEnabled: packet.payload.toString() === "on" ? true : false,
-                wateringDurationInMs: deviceData.wateringDurationInMs,
-                timestamp: new Date().toISOString(),
-            })
+        if (parsedTopic.action === "trigger") {
+            logger.info(
+                `got publish trigger packet from ${client.id} to ${parsedTopic.deviceId}`,
+            )
         }
     }
 
