@@ -68,7 +68,7 @@ export default triggerWateringRouter
 
 /**
  * @swagger
- * /api/V1/triggerWatering:
+ * /api/v1/triggerWatering:
  *  post:
  *   summary: Trigger watering device on/off
  *   description: Immediately turns a watering device on or off based on the specified action.
