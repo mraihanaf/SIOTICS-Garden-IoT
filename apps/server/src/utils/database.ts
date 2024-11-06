@@ -1,11 +1,14 @@
 import sqlite3 from "sqlite3"
-import { WateringConfig, WateringLog } from "../types/database"
-
+import {
+    WateringConfig,
+    WateringConfigWithLastseen,
+    WateringLog,
+} from "../types/database"
 export class Database {
     private db: sqlite3.Database
 
     constructor() {
-        this.db = new sqlite3.Database("device.db", (err) => {
+        this.db = new sqlite3.Database("database.sqlite", (err) => {
             if (err) {
                 console.error("Database connection error:", err)
                 throw err
@@ -21,14 +24,17 @@ export class Database {
             CREATE TABLE IF NOT EXISTS device_config (
                 deviceId TEXT PRIMARY KEY,
                 wateringDurationInMs INTEGER NOT NULL,
-                cronExpression TEXT NOT NULL
+                cronExpression TEXT NOT NULL,
+                lastSeen TEXT
             );
 
             CREATE TABLE IF NOT EXISTS watering_logs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 deviceId TEXT NOT NULL,
-                wateringDurationInMs INTEGER NOT NULL,
+                wateringDurationInMs INTEGER,
                 isEnabled BOOLEAN NOT NULL,
+                isAutomated BOOLEAN NOT NULL,
+                reason TEXT,
                 timestamp TEXT NOT NULL,
                 FOREIGN KEY (deviceId) REFERENCES device_config (deviceId)
             );
@@ -45,15 +51,48 @@ export class Database {
         })
     }
 
-    // Device Config Methods
+    async setLastSeen(deviceId: string): Promise<void> {
+        const now = new Date().toISOString()
+        return new Promise((resolve, reject) => {
+            this.db.run(
+                "UPDATE device_config SET lastSeen = ? WHERE deviceId = ?",
+                [now, deviceId],
+                (err) => {
+                    if (err) reject(err)
+                    else resolve()
+                },
+            )
+        })
+    }
+
+    async getLastSeen(deviceId: string): Promise<string | null> {
+        return new Promise((resolve, reject) => {
+            this.db.get(
+                "SELECT lastSeen FROM device_config WHERE deviceId = ?",
+                [deviceId],
+                (err, row: { lastSeen: string | null } | undefined) => {
+                    if (err) reject(err)
+                    else resolve(row?.lastSeen ?? null)
+                },
+            )
+        })
+    }
+
     async getDeviceConfig(deviceId: string): Promise<WateringConfig | null> {
         return new Promise((resolve, reject) => {
             this.db.get(
                 "SELECT * FROM device_config WHERE deviceId = ?",
                 [deviceId],
-                (err, row) => {
+                async (err, row) => {
                     if (err) reject(err)
-                    else resolve((row as WateringConfig) || null)
+                    else {
+                        if (row) {
+                            await this.setLastSeen(deviceId).catch(
+                                console.error,
+                            )
+                        }
+                        resolve((row as WateringConfig) || null)
+                    }
                 },
             )
         })
@@ -66,8 +105,10 @@ export class Database {
             VALUES (?, ?, ?)
             ON CONFLICT(deviceId) DO UPDATE SET
                 wateringDurationInMs = excluded.wateringDurationInMs,
-                cronExpression = excluded.cronExpression
+                cronExpression = excluded.cronExpression,
+                lastSeen = excluded.lastSeen
         `
+        const now = new Date().toISOString()
 
         return new Promise((resolve, reject) => {
             this.db.run(
@@ -85,20 +126,33 @@ export class Database {
         })
     }
 
-    // Logging Methods
     async addLog(log: WateringLog): Promise<void> {
         return new Promise((resolve, reject) => {
             this.db.run(
-                "INSERT INTO watering_logs (deviceId, wateringDurationInMs, isEnabled, timestamp) VALUES (?, ?, ?, ?)",
+                `INSERT INTO watering_logs (
+                    deviceId, 
+                    wateringDurationInMs, 
+                    isEnabled, 
+                    isAutomated,
+                    reason,
+                    timestamp
+                ) VALUES (?, ?, ?, ?, ?, ?)`,
                 [
                     log.deviceId,
                     log.wateringDurationInMs,
                     log.isEnabled,
+                    log.isAutomated,
+                    log.reason,
                     log.timestamp,
                 ],
-                (err) => {
+                async (err) => {
                     if (err) reject(err)
-                    else resolve()
+                    else {
+                        await this.setLastSeen(log.deviceId).catch(
+                            console.error,
+                        )
+                        resolve()
+                    }
                 },
             )
         })
@@ -140,6 +194,15 @@ export class Database {
                     else resolve(rows as WateringLog[])
                 },
             )
+        })
+    }
+
+    async getDevices(): Promise<WateringConfigWithLastseen[]> {
+        return new Promise((resolve, reject) => {
+            this.db.all(`SELECT * FROM device_config`, (err, rows) => {
+                if (err) reject(err)
+                else resolve(rows as WateringConfigWithLastseen[])
+            })
         })
     }
 
