@@ -26,6 +26,10 @@ export class clientValidator {
     public static isFromClient(client: Client | null): boolean {
         return !this.isFromHost(client)
     }
+    public static isWebsocketClient(client: Client | null): boolean {
+        if (client?.req) return true
+        return false
+    }
 }
 
 export class cronValidator {
