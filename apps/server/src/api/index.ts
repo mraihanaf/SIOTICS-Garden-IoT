@@ -9,6 +9,8 @@ import getConnectedDevicesIds from "./v1/getConnectedDeviceIds"
 import rateLimit from "express-rate-limit"
 import getRegisteredDevices from "./v1/getRegisteredDevices"
 import initDeviceRouter from "./v1/initDevice"
+import getWateringLogs from "./v1/getWateringLogs"
+
 const router: Router = Router()
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
@@ -33,6 +35,7 @@ router.use("/v1/triggerWatering", triggerWatering)
 router.use("/v1/getConnectedDeviceIds", getConnectedDevicesIds)
 router.use("/v1/getRegisteredDevices", getRegisteredDevices)
 router.use("/v1/initDevice", initDeviceRouter)
+router.use("/v1/getWateringLogs", getWateringLogs)
 
 router.get("/v1", (req: Request, res: Response) => {
     logger.debug("someone just requested /api/v1")
