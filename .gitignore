@@ -13,4 +13,4 @@ build/
 Thumbs.db
 dist/
 
-device.db
+database.sqlite
