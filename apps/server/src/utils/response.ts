@@ -29,4 +29,5 @@ export enum Status {
     BadRequest = 400,
     TooManyRequest = 429,
     InternalError = 500,
+    Forbidden = 403,
 }
