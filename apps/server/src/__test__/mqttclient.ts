@@ -47,7 +47,7 @@ async function clientStart() {
         client.subscribe(
             `esp/${client.options.clientId}/watering/setDurationInMs`,
         )
-
+        client.subscribe(`esp/${client.options.clientId}/watering/trigger`)
         client.on("message", (topic, payload) => {
             if (
                 topic ===
@@ -60,6 +60,14 @@ async function clientStart() {
             ) {
                 logger.info(`got setCron message ${payload.toString()}`)
                 cronExpression = payload.toString()
+            } else if (
+                topic === `esp/${client.options.clientId}/watering/trigger`
+            ) {
+                if (payload.toString() === "on") {
+                    logger.info("turning on the relay")
+                } else {
+                    logger.info("turning off the relay")
+                }
             }
         })
         // client.publish("esp/test/system/logs", "berhasil yey")
