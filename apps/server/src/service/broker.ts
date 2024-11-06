@@ -113,7 +113,17 @@ broker.authorizePublish = function (client: Client | null, packet, callback) {
     return callback(null)
 }
 
-broker.on("clientDisconnect", (client: Client) => {
+broker.on("clientDisconnect", async (client: Client) => {
+    if (CONNECTED.DEVICES.has(client.id)) {
+        try {
+            const isDeviceInDatabase = await db.getDeviceConfig(client.id)
+            if (isDeviceInDatabase) {
+                await db.setLastSeen(client.id) // this looks wrong but ima fix it later
+            }
+        } catch (err) {
+            logger.error(err)
+        }
+    }
     CONNECTED.CLIENTS.delete(client?.id)
     CONNECTED.DEVICES.delete(client?.id)
 })
