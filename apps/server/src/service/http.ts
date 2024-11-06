@@ -1,4 +1,4 @@
-import express, { Express, Request, Response } from "express"
+import express, { Express, Request, Response, NextFunction } from "express"
 import { httpLogger as logger } from "../utils/logger"
 import router from "../api"
 import { Status } from "../utils/response"
