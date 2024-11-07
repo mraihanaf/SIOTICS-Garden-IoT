@@ -8,7 +8,7 @@ const getWateringLogs = Router()
 getWateringLogs.get("/:deviceId", async (req: Request, res: Response) => {
     logger.debug(`${req.socket.remoteAddress} get ${req.params.deviceId} logs`)
     try {
-        const wateringLogs = await db.getDeviceLogs(req.body.deviceId)
+        const wateringLogs = await db.getDeviceLogs(req.params.deviceId)
         if (wateringLogs.length === 0)
             return res.sendFormatted({
                 statusCode: Status.NotFound,
@@ -36,7 +36,7 @@ export default getWateringLogs
  * /api/v1/getWateringLogs/{deviceId}:
  *   get:
  *     summary: Retrieve watering logs for a specific device
- *     description: Fetch the watering logs for the specified device ID. If no logs are found, returns a message indicating so.
+ *     description: Fetch the watering logs for the specified device ID. If no logs are found for the device, a "Device not found or no logs yet" message is returned. If the device ID is missing or malformed, a 400 error is returned.
  *     tags:
  *       - Watering Management
  *     parameters:
@@ -89,7 +89,7 @@ export default getWateringLogs
  *                         format: date-time
  *                         example: "2024-01-01T12:00:00Z"
  *       400:
- *         description: Bad request - Missing deviceId parameter.
+ *         description: Bad request - Missing or malformed deviceId parameter.
  *         content:
  *           application/json:
  *             schema:
@@ -100,7 +100,7 @@ export default getWateringLogs
  *                   example: 400
  *                 message:
  *                   type: string
- *                   example: Bad Request! - Missing deviceId parameter.
+ *                   example: Bad Request! - Missing or malformed deviceId parameter.
  *                 data:
  *                   type: null
  *       404:
@@ -119,7 +119,7 @@ export default getWateringLogs
  *                 data:
  *                   type: null
  *       500:
- *         description: Internal server error - Failed to retrieve the logs.
+ *         description: Internal server error - Failed to retrieve the logs from the database.
  *         content:
  *           application/json:
  *             schema:

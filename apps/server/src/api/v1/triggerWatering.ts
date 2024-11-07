@@ -69,102 +69,101 @@ export default triggerWateringRouter
 /**
  * @swagger
  * /api/v1/triggerWatering:
- *  post:
- *   summary: Trigger watering device on/off
- *   description: Immediately turns a watering device on or off based on the specified action.
- *                Requires valid authentication and checks if the device is active before triggering the action.
- *   tags:
- *     - Watering Management
- *   requestBody:
- *     required: true
- *     content:
- *       application/json:
- *         schema:
- *           type: object
- *           required:
- *             - deviceId
- *             - action
- *             - username
- *             - password
- *           properties:
- *             deviceId:
- *               type: string
- *               description: Unique identifier for the watering device.
- *               example: device_123
- *             action:
- *               type: string
- *               description: The action to perform on the device (turn it "on" or "off").
- *               enum:
- *                 - on
- *                 - off
- *               example: "on"
- *             username:
- *               type: string
- *               description: Username for API authentication.
- *               example: user123
- *             password:
- *               type: string
- *               description: Password for API authentication.
- *               example: pass123
- *   responses:
- *     200:
- *       description: Device triggered successfully.
+ *   post:
+ *     summary: Trigger watering device on/off
+ *     description: Immediately turns a watering device on or off based on the specified action. Requires valid authentication and checks if the device is active before triggering the action.
+ *     tags:
+ *       - Watering Management
+ *     requestBody:
+ *       required: true
  *       content:
  *         application/json:
  *           schema:
  *             type: object
+ *             required:
+ *               - deviceId
+ *               - action
+ *               - username
+ *               - password
  *             properties:
- *               statusCode:
- *                 type: number
- *                 example: 200
- *               message:
+ *               deviceId:
  *                 type: string
- *                 example: Successfully triggered device
- *               data:
- *                 type: null
- *     400:
- *       description: Bad request - Missing required fields or invalid action.
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               statusCode:
- *                 type: number
- *                 example: 400
- *               message:
+ *                 description: Unique identifier for the watering device.
+ *                 example: "device_123"
+ *               action:
  *                 type: string
- *                 example: Bad Request! - Invalid or missing parameters.
- *               data:
- *                 type: null
- *     403:
- *       description: Forbidden - Invalid username or password.
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               statusCode:
- *                 type: number
- *                 example: 403
- *               message:
+ *                 description: The action to perform on the device (turn it "on" or "off").
+ *                 enum:
+ *                   - "on"
+ *                   - "off"
+ *                 example: "on"
+ *               username:
  *                 type: string
- *                 example: Invalid username or password.
- *               data:
- *                 type: null
- *     404:
- *       description: Device not found or inactive.
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               statusCode:
- *                 type: number
- *                 example: 404
- *               message:
+ *                 description: Username for API authentication.
+ *                 example: "user123"
+ *               password:
  *                 type: string
- *                 example: Device inactive or not found.
- *               data:
- *                 type: null
+ *                 description: Password for API authentication.
+ *                 example: "pass123"
+ *     responses:
+ *       200:
+ *         description: Device triggered successfully.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 statusCode:
+ *                   type: number
+ *                   example: 200
+ *                 message:
+ *                   type: string
+ *                   example: "Successfully triggered device"
+ *                 data:
+ *                   type: null
+ *       400:
+ *         description: Bad request - Missing required fields or invalid action (action must be "on" or "off").
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 statusCode:
+ *                   type: number
+ *                   example: 400
+ *                 message:
+ *                   type: string
+ *                   example: "Bad Request! - Invalid or missing parameters."
+ *                 data:
+ *                   type: null
+ *       403:
+ *         description: Forbidden - Invalid username or password.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 statusCode:
+ *                   type: number
+ *                   example: 403
+ *                 message:
+ *                   type: string
+ *                   example: "Invalid username or password."
+ *                 data:
+ *                   type: null
+ *       404:
+ *         description: Device not found or inactive.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 statusCode:
+ *                   type: number
+ *                   example: 404
+ *                 message:
+ *                   type: string
+ *                   example: "Device inactive or not found."
+ *                 data:
+ *                   type: null
  */

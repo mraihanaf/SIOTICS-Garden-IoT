@@ -54,12 +54,11 @@ export default initDeviceRouter
  * /api/v1/initDevice:
  *   post:
  *     summary: Initialize a device
- *     description: Initializes a new device by setting default configuration (watering duration and cron expression).
- *                  The device must be connected, and the user must provide valid authentication credentials.
+ *     description: Initializes a new device by setting default configuration (watering duration and cron expression). The device must be connected, and the user must provide valid authentication credentials.
  *     tags:
  *       - Device Management
  *     security:
- *       - basicAuth: []
+ *       - basicAuth: []  # Specifies that basic authentication is required
  *     requestBody:
  *       required: true
  *       content:
@@ -111,7 +110,7 @@ export default initDeviceRouter
  *                       type: string
  *                       example: "0 0 * * *"
  *       400:
- *         description: Bad request - Missing required fields.
+ *         description: Bad request - Missing required fields or invalid input.
  *         content:
  *           application/json:
  *             schema:

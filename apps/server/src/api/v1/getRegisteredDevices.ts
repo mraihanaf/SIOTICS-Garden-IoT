@@ -31,7 +31,7 @@ export default getRegisteredDevices
  * /api/v1/getRegisteredDevices:
  *   get:
  *     summary: Retrieve the list of registered devices
- *     description: Fetches the configuration of all devices that are registered in the system. This includes devices with their associated settings like watering duration, cron expression, etc.
+ *     description: Fetches the configuration of all devices that are registered in the system. This includes the devices' settings such as watering duration, cron expression, and other device-related information.
  *     tags:
  *       - Device Management
  *     responses:
@@ -47,7 +47,7 @@ export default getRegisteredDevices
  *                   example: 200
  *                 message:
  *                   type: string
- *                   example: "Successfully get the devices config"
+ *                   example: "Successfully fetched the devices' config"
  *                 data:
  *                   type: array
  *                   items:
@@ -63,7 +63,7 @@ export default getRegisteredDevices
  *                         type: string
  *                         example: "0 0 * * *"
  *       500:
- *         description: Internal server error - failed to retrieve devices.
+ *         description: Internal server error - Failed to retrieve devices' configurations.
  *         content:
  *           application/json:
  *             schema:
