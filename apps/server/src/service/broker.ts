@@ -95,7 +95,8 @@ broker.authorizePublish = function (client: Client | null, packet, callback) {
 
     if (
         topicValidator.isHostTopic(packet.topic) &&
-        clientValidator.isFromClient(client)
+        clientValidator.isFromClient(client) &&
+        !topicValidator.isClientTopic(packet.topic)
     ) {
         logger.warn(`client ${client?.id} trying to send a host publish packet`)
         return callback(new Error("invalid client"))
@@ -159,6 +160,16 @@ export class publishPacketHandler {
             logger.info(
                 `got publish trigger packet from ${client.id} to ${parsedTopic.deviceId}`,
             )
+            if (clientValidator.isFromClient(client)) {
+                return await db.addLog({
+                    deviceId: client.id,
+                    reason: null,
+                    isAutomated: true,
+                    isEnabled: packet.payload.toString() === "on",
+                    wateringDurationInMs: null,
+                    timestamp: new Date().toISOString(),
+                })
+            }
         }
     }
 
