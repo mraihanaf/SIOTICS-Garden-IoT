@@ -11,10 +11,6 @@ build/
 # MacOS/Windows/Linux files
 .DS_Store
 Thumbs.db
-<<<<<<< HEAD
 dist/
 
 database.sqlite
-=======
-dist/
->>>>>>> 030f7f2fc57f46294ff3027f1617675da0fc6e2b
