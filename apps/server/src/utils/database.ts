@@ -105,8 +105,7 @@ export class Database {
             VALUES (?, ?, ?)
             ON CONFLICT(deviceId) DO UPDATE SET
                 wateringDurationInMs = excluded.wateringDurationInMs,
-                cronExpression = excluded.cronExpression,
-                lastSeen = excluded.lastSeen
+                cronExpression = excluded.cronExpression
         `
         const now = new Date().toISOString()
 
