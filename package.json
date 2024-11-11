@@ -13,7 +13,10 @@
     },
     "devDependencies": {
         "husky": "^9.1.6",
+<<<<<<< HEAD
         "pino-pretty": "^11.3.0",
+=======
+>>>>>>> 030f7f2fc57f46294ff3027f1617675da0fc6e2b
         "prettier": "^3.3.3"
     }
 }
