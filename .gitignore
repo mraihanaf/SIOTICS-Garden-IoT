@@ -13,4 +13,5 @@ build/
 Thumbs.db
 dist/
 
-database.sqlite
+database/
+mydb

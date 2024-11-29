@@ -13,10 +13,17 @@
         "forceConsistentCasingInFileNames": true /* Ensure that casing is correct in imports. */,
 
         /* Type Checking */
-        "strict": true /* Enable all strict type-checking options. */,
+        "strict": false /* Enable all strict type-checking options. */,
         "allowUnusedLabels": false /* Disable error reporting for unused labels. */,
         "allowUnreachableCode": false /* Disable error reporting for unreachable code. */,
-        "skipLibCheck": true /* Skip type checking all .d.ts files. */
+        "skipLibCheck": false /* Skip type checking all .d.ts files. */,
+        "allowJs": true
     },
-    "exclude": ["src/__test__/*", "jest.config.ts", "*.config.ts"]
+    "exclude": [
+        "src/__test__/*",
+        "jest.config.ts",
+        "*.config.ts",
+        "./dist",
+        "jest.config.js"
+    ]
 }

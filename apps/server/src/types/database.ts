@@ -1,17 +1,8 @@
-export interface WateringConfig {
-    deviceId: string
-    wateringDurationInMs: number
-    cronExpression: string
+export interface IServerInitConfig {
+    brokerUsername: string
+    brokerPassword: string // sha-512 hash (password:salt)
+    apiUsername: string
+    apiPassword: string // sha-512 hash (password:salt)
 }
 
-export interface WateringConfigWithLastseen extends WateringConfig {
-    lastSeen: string | null
-}
-export interface WateringLog {
-    deviceId: string
-    wateringDurationInMs: number | null
-    isEnabled: boolean
-    isAutomated: boolean
-    reason: string | null
-    timestamp: string
-}
+export type ISprinklerConfig = "durationInMs" | "cronExpression"

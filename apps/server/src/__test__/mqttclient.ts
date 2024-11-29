@@ -21,22 +21,6 @@ function handleDisconnected(client: MqttClient) {
     clientStart()
 }
 
-function sendHeartbeat(client: MqttClient): void {
-    logger.debug("sending heartbeat")
-    if (!client.connected) return handleDisconnected(client)
-    client.publish(
-        `esp/${client.options.clientId}/heartbeat`,
-        JSON.stringify({
-            date: new Date().toISOString(),
-            wateringDurationInMs: wateringDurationInMs,
-            cronExp: cronExpression,
-            isWatering: !relayState, // jika relay nyala maka keran mati, jika relay mati maka keran nyala
-        }),
-        { qos: 0 },
-        (err) => {},
-    )
-}
-
 function changeJob(
     cronExpression: string,
     wateringDurationInMs: number,
@@ -78,45 +62,27 @@ async function clientStart() {
             `mqtt://localhost:${process.env.MQTT_PORT}`,
             {
                 clientId: `test`,
+                will: {
+                    topic: `sprinkler/test/status`,
+                    payload: Buffer.from("DEAD"),
+                    retain: true,
+                    qos: 1,
+                },
+                username: "thing",
+                password: "thing",
             },
         )
-        logger.info("connected to the broker")
-        client.publish("esp/init", client.options.clientId!, { qos: 2 })
-        client.subscribe(`esp/${client.options.clientId}/watering/setCron`)
-        client.subscribe(
-            `esp/${client.options.clientId}/watering/setDurationInMs`,
-        )
-        client.subscribe(`esp/${client.options.clientId}/watering/trigger`)
-        client.on("message", (topic, payload) => {
-            if (
-                topic ===
-                `esp/${client.options.clientId}/watering/setDurationInMs`
-            ) {
-                logger.info(`got setDuration message ${payload.toString()}`)
-                wateringDurationInMs = parseInt(payload.toString())
-                changeJob(cronExpression, wateringDurationInMs, client)
-            } else if (
-                topic === `esp/${client.options.clientId}/watering/setCron`
-            ) {
-                logger.info(`got setCron message ${payload.toString()}`)
-                cronExpression = payload.toString()
-                changeJob(cronExpression, wateringDurationInMs, client)
-            } else if (
-                topic === `esp/${client.options.clientId}/watering/trigger`
-            ) {
-                if (payload.toString() === "on") {
-                    logger.info("turning on the relay (berhentikan penyiraman)")
-                    relayState = true
-                } else {
-                    logger.info(
-                        "turning off the relay (matikan relay/mulai penyiram)",
-                    )
-                    relayState = false
-                }
-            }
+
+        client.publish("sprinkler/test/status", "ALIVE", {
+            qos: 1,
+            retain: true,
         })
-        // client.publish("esp/test/system/logs", "berhasil yey")
-        heartbeatIntervarId = setInterval(() => sendHeartbeat(client), 1000)
+
+        client.publish("sprinkler/test/trigger", "OFF", {
+            qos: 1,
+            retain: true,
+        })
+        logger.info("connected to the broker")
     } catch (err) {
         logger.error(err)
         logger.error(

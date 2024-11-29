@@ -2,58 +2,42 @@ import Aedes, { Client, AuthenticateError, AuthErrorCode } from "aedes"
 import { config } from "dotenv"
 import { brokerLogger as logger } from "../utils/logger"
 import { IPublishPacket } from "mqtt"
-import { WateringService } from "../utils/brokerService"
-import { TopicValidator, clientValidator } from "../utils/validator"
+import {
+    SprinklerService,
+    triggerSprinklerPublisher,
+} from "../utils/sprinklerBuilder"
+import { clientValidator } from "../utils/validator"
 import { topicParser } from "../utils/parser"
-import db from "../utils/database"
+import { serverDatabase, sprinklerDatabase } from "../utils/database"
+import { brokerAuth } from "../utils/auth"
+import { ISprinklerConfig } from "../types"
+
+import AaedesPersistence from "aedes-persistence-level"
+import { Level } from "level"
+
+const aedesPersistence = AaedesPersistence(new Level("./mydb"))
 
 config()
-
-export const DEVICE_DEFAULT = {
-    durationInMs: 1000 * 5 * 60, // 5 mins
-    cronExpression: "0 */6 * * *", // At minute 0 past every 6th hour
-}
-
-const SEPARATOR = "/"
-
-const HOST_TOPICS = [
-    /^esp\/.+\/watering\/setDuration$/,
-    /^esp\/.+\/watering\/setCron$/,
-    /^esp\/.+\/system\/ota$/,
-    /^esp\/.+\/system\/restart$/,
-    /^esp\/.+\/watering\/trigger$/,
-]
-
-const CLIENT_TOPICS = [
-    /^esp\/init$/,
-    /^esp\/.+\/heartbeat$/,
-    /^esp\/.+\/system\/logs$/,
-    /^esp\/.+\/watering\/logs$/,
-    /^esp\/.+\/watering\/trigger$/,
-]
-
-/*
-     esp/init -> payload: deviceId
-     esp/deviceId/heartbeat -> payload: idle|watering/rain_status(true-false)/cron_exp/watering_duration_in_ms
-     esp/deviceId/watering/setCron -> payload: cronExp
-  (host)   esp/deviceId/watering/setDuration -> payload: watering_duration_in_ms
-  (host)  esp/deviceId/watering/logs -> payload: watering_status(true/false)/rain_status(true/false)
-     esp/deviceId/system/logs -> any
+/* garden/#
+     sprinkler/{deviceId}/status (retained)
+     sprinkler/{deviceId}/config/cron (retained)
+     sprinkler/{deviceId}/config/duration (retained)
+     sprinkler/{deviceId}/trigger (retained)
+     sprinkler/{deviceId}/logs
+     sprinkler/{deviceId}/system/ota
+     sprinkler/{deviceId}/system/logs
  */
 
-export const CONNECTED = {
-    CLIENTS: new Set(),
-    DEVICES: new Set(),
-}
-
-const broker: Aedes = new Aedes()
-const topicValidator = new TopicValidator({
-    host_topics: HOST_TOPICS,
-    client_topics: CLIENT_TOPICS,
+const broker: Aedes = new Aedes({
+    persistence: aedesPersistence,
 })
 
 broker.on("client", (client: Client) => {
-    logger.info(`A new client with id ${client.id} connected.`)
+    if (clientValidator.isWebsocketClient(client)) {
+        logger.info(`websocket client with id ${client.id} connected`)
+    } else {
+        logger.info(`thing client with id ${client.id} connected`)
+    }
 })
 
 class AuthError extends Error implements AuthenticateError {
@@ -65,68 +49,29 @@ class AuthError extends Error implements AuthenticateError {
     }
 }
 
-broker.authenticate = function (client, _username, _password, callback) {
-    if (CONNECTED.CLIENTS.has(client?.id))
-        return callback(
-            new AuthError(
-                "clientId already connected",
-                AuthErrorCode.IDENTIFIER_REJECTED,
-            ),
-            false,
-        )
-    if (!clientValidator.isWebsocketClient(client)) {
-        CONNECTED.DEVICES.add(client?.id)
-    }
-    CONNECTED.CLIENTS.add(client?.id)
+broker.authenticate = async function (client, username, password, callback) {
+    const isServerConfigured = await serverDatabase.checkIsConfigured()
+    if (!isServerConfigured)
+        return callback(new AuthError("Server not initialized", 0), false)
+    if (clientValidator.isWebsocketClient(client)) return callback(null, true)
+    if (!brokerAuth.authenticate(username?.toString()!, password?.toString()!))
+        return callback(new AuthError("wrong username or password", 1), false)
     return callback(null, true)
 }
 
 broker.authorizePublish = function (client: Client | null, packet, callback) {
-    if (clientValidator.isWebsocketClient(client)) {
-        logger.warn(
-            `websocket client ${client?.req?.socket.remoteAddress} trying to publish message but rejected`,
-        )
-        return callback(new Error("websocket not allowed"))
-    }
-    if (!topicValidator.isValidTopic(packet.topic)) {
-        logger.warn("invalid topic " + packet.topic + " from " + client?.id)
-        return callback(new Error("invalid topic"))
-    }
-
-    if (
-        topicValidator.isHostTopic(packet.topic) &&
-        clientValidator.isFromClient(client) &&
-        !topicValidator.isClientTopic(packet.topic)
-    ) {
-        logger.warn(`client ${client?.id} trying to send a host publish packet`)
-        return callback(new Error("invalid client"))
-    }
-    const parsedTopic = topicParser.parse(packet.topic)
-    if (parsedTopic.deviceId === "init") {
-        if (client?.id !== packet.payload.toString()) {
-            logger.warn(`clientId missmatch! from client ${client?.id}`)
-            return new Error("cliendId missmatch!")
-        }
-        return callback(null)
-    }
-    if (parsedTopic.deviceId !== client?.id)
-        return callback(new Error("invalid client"))
-    return callback(null)
+    if (clientValidator.isWebsocketClient(client))
+        return callback(new Error("websocket client not allowed to publish"))
+    return callback()
 }
 
 broker.on("clientDisconnect", async (client: Client) => {
-    if (CONNECTED.DEVICES.has(client.id)) {
-        try {
-            const isDeviceInDatabase = await db.getDeviceConfig(client.id)
-            if (isDeviceInDatabase) {
-                await db.setLastSeen(client.id) // this looks wrong but ima fix it later
-            }
-        } catch (err) {
-            logger.error(err)
-        }
+    if (clientValidator.isNotWebsocketClient(client)) {
+        new SprinklerService(client.id).clearRetainedMessage([
+            triggerSprinklerPublisher.topic,
+        ])
+        await sprinklerDatabase.updateLastseen(client.id)
     }
-    CONNECTED.CLIENTS.delete(client?.id)
-    CONNECTED.DEVICES.delete(client?.id)
 })
 
 broker.on("publish", async (packet, client) => {
@@ -153,43 +98,27 @@ export class publishPacketHandler {
         logger.debug(
             `${packet.topic} from ${client.id} with payload=${packet.payload.toString()}`,
         )
-        if (packet.topic === "esp/init")
-            return this.handleClientInitPublishPacket(packet)
-        const parsedTopic = topicParser.parse(packet.topic)
-        if (parsedTopic.action === "trigger") {
-            logger.info(
-                `got publish trigger packet from ${client.id} to ${parsedTopic.deviceId}`,
-            )
-            if (clientValidator.isFromClient(client)) {
-                return await db.addLog({
-                    deviceId: client.id,
-                    reason: null,
-                    isAutomated: true,
-                    isEnabled: packet.payload.toString() === "on",
-                    wateringDurationInMs: null,
-                    timestamp: new Date().toISOString(),
-                })
-            }
+        const topic = topicParser.parse(packet.topic)
+        switch (topic.type) {
+            case "trigger":
+                logger.info(`${client.id} sprinkler turned ${packet.payload}`)
+                break
+            case "config":
+                logger.info(
+                    `${client.id} ${topic.action} config set to ${packet.payload.toString()}`,
+                )
+                if (
+                    topic.action !== "durationInMs" &&
+                    topic.action !== "cronExpression"
+                )
+                    return
+                topic.action as ISprinklerConfig
+                await sprinklerDatabase.setConfig(
+                    topic.deviceId,
+                    topic.action!,
+                    packet.payload.toString(),
+                )
+                break
         }
-    }
-
-    private static async handleClientInitPublishPacket(packet: IPublishPacket) {
-        const wateringService = new WateringService(
-            broker,
-            packet.payload.toString(),
-        )
-        let deviceData = await db.getDeviceConfig(packet.payload.toString())
-        if (!deviceData) {
-            deviceData = {
-                deviceId: packet.payload.toString(),
-                wateringDurationInMs: DEVICE_DEFAULT.durationInMs,
-                cronExpression: DEVICE_DEFAULT.cronExpression,
-            }
-        }
-        wateringService
-            .setCron(deviceData.cronExpression)
-            .setDurationInMs(deviceData.wateringDurationInMs)
-            .publish()
-        logger.info(`initialized client ${packet.payload.toString()}`)
     }
 }

@@ -6,7 +6,7 @@ export class topicParser {
         return topic.split(SEPARATOR)
     }
     static parse(topic: string): IParsedTopic {
-        const [prefix, deviceId, type, action] = topic.split(SEPARATOR)
+        const [prefix, deviceId, type, action] = this.parseToArray(topic)
         return {
             prefix,
             deviceId,

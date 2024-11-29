@@ -8,38 +8,16 @@ This server provides both Web Server and MQTT broker functionality for IoT garde
 
 ## Features
 - MQTT Over Websockets
+- Local NTP Server
 - Web API Rate Limiting
 - CORS Support
-- SQLite Database Integration
+- Level Database Integration
 - MQTT Broker (Aedes)
 - Logging with Pino
-- Broker host only topic (only the broker itself that can publish message to that topics)
-- Broker Client publish authorization (Only client with initialized id that can only publish to spesific topic)
 - Broker Simple client auth (client cant connect with the same id)
 
 ## Web Api docs
-Start the server, see `/api-docs` endpoint 
-
-## Broker Topics
-```
-Client (ESP32)
-    esp/init (publish)
-    esp/clientId/watering (publish)
-    esp/clientId/heartbeat (publish)
-    esp/clientId/watering/trigger (publish & subscribe)
-    esp/clientId/watering/setDurationInMs (subscribe)
-    esp/clientId/watering/setCron (subscribe)
-    esp/clientId/system/logs (publish) (NOT AVAILABLE YET)
-    esp/clientId/system/restart (subscribe) (NOT AVAILABLE YET)
-    esp/clientId/system/ota (subscribe) (NOT AVAILABLE YET)
-Host
-    esp/init (subscribe)
-    esp/clientId/watering/trigger (publish & subscribe)
-    esp/clientId/watering/setDuration (publish)
-    esp/clientId/watering/setCron (publish)
-    esp/clientId/system/restart (publish) (NOT AVAILABLE YET)
-    esp/clientId/system/ota (publish) (NOT AVAILABLE YET)
-```
+Start the server, see `/api/docs` endpoint 
 
 ## Developments
 To run the development server with hot-reload:

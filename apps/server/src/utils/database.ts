@@ -1,228 +1,109 @@
-import sqlite3 from "sqlite3"
-import {
-    WateringConfig,
-    WateringConfigWithLastseen,
-    WateringLog,
-} from "../types/database"
-export class Database {
-    private db: sqlite3.Database
+import { Level } from "level"
+import logger from "./logger"
+import { ISprinklerConfig, IServerInitConfig } from "../types/database"
 
-    constructor() {
-        this.db = new sqlite3.Database("database.sqlite", (err) => {
-            if (err) {
-                console.error("Database connection error:", err)
-                throw err
-            }
-        })
+const db = new Level("./database")
 
-        // Initialize tables on startup
-        this.initialize().catch(console.error)
+export class sprinklerDatabase {
+    static async addWateringLogs(deviceId: string) {
+        throw new Error("method not implemented yet.")
     }
 
-    private async initialize(): Promise<void> {
-        const schema = `
-            CREATE TABLE IF NOT EXISTS device_config (
-                deviceId TEXT PRIMARY KEY,
-                wateringDurationInMs INTEGER NOT NULL,
-                cronExpression TEXT NOT NULL,
-                lastSeen TEXT
-            );
-
-            CREATE TABLE IF NOT EXISTS watering_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                deviceId TEXT NOT NULL,
-                wateringDurationInMs INTEGER,
-                isEnabled BOOLEAN NOT NULL,
-                isAutomated BOOLEAN NOT NULL,
-                reason TEXT,
-                timestamp TEXT NOT NULL,
-                FOREIGN KEY (deviceId) REFERENCES device_config (deviceId)
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_logs_deviceId_timestamp 
-            ON watering_logs(deviceId, timestamp);
-        `
-
-        return new Promise((resolve, reject) => {
-            this.db.exec(schema, (err) => {
-                if (err) reject(err)
-                else resolve()
-            })
-        })
-    }
-
-    async setLastSeen(deviceId: string): Promise<void> {
-        const now = new Date().toISOString()
-        return new Promise((resolve, reject) => {
-            this.db.run(
-                "UPDATE device_config SET lastSeen = ? WHERE deviceId = ?",
-                [now, deviceId],
-                (err) => {
-                    if (err) reject(err)
-                    else resolve()
-                },
-            )
-        })
-    }
-
-    async getLastSeen(deviceId: string): Promise<string | null> {
-        return new Promise((resolve, reject) => {
-            this.db.get(
-                "SELECT lastSeen FROM device_config WHERE deviceId = ?",
-                [deviceId],
-                (err, row: { lastSeen: string | null } | undefined) => {
-                    if (err) reject(err)
-                    else resolve(row?.lastSeen ?? null)
-                },
-            )
-        })
-    }
-
-    async getDeviceConfig(deviceId: string): Promise<WateringConfig | null> {
-        return new Promise((resolve, reject) => {
-            this.db.get(
-                "SELECT * FROM device_config WHERE deviceId = ?",
-                [deviceId],
-                async (err, row) => {
-                    if (err) reject(err)
-                    else {
-                        if (row) {
-                            await this.setLastSeen(deviceId).catch(
-                                console.error,
-                            )
-                        }
-                        resolve((row as WateringConfig) || null)
-                    }
-                },
-            )
-        })
-    }
-
-    async upsertDeviceConfig(config: WateringConfig): Promise<void> {
-        const sql = `
-            INSERT INTO device_config 
-            (deviceId, wateringDurationInMs, cronExpression)
-            VALUES (?, ?, ?)
-            ON CONFLICT(deviceId) DO UPDATE SET
-                wateringDurationInMs = excluded.wateringDurationInMs,
-                cronExpression = excluded.cronExpression
-        `
-        const now = new Date().toISOString()
-
-        return new Promise((resolve, reject) => {
-            this.db.run(
-                sql,
-                [
-                    config.deviceId,
-                    config.wateringDurationInMs,
-                    config.cronExpression,
-                ],
-                (err) => {
-                    if (err) reject(err)
-                    else resolve()
-                },
-            )
-        })
-    }
-
-    async addLog(log: WateringLog): Promise<void> {
-        return new Promise((resolve, reject) => {
-            this.db.run(
-                `INSERT INTO watering_logs (
-                    deviceId, 
-                    wateringDurationInMs, 
-                    isEnabled, 
-                    isAutomated,
-                    reason,
-                    timestamp
-                ) VALUES (?, ?, ?, ?, ?, ?)`,
-                [
-                    log.deviceId,
-                    log.wateringDurationInMs,
-                    log.isEnabled,
-                    log.isAutomated,
-                    log.reason,
-                    log.timestamp,
-                ],
-                async (err) => {
-                    if (err) reject(err)
-                    else {
-                        await this.setLastSeen(log.deviceId).catch(
-                            console.error,
-                        )
-                        resolve()
-                    }
-                },
-            )
-        })
-    }
-
-    async getDeviceLogs(
+    static async setConfig(
         deviceId: string,
-        limit: number = 100,
-    ): Promise<WateringLog[]> {
-        return new Promise((resolve, reject) => {
-            this.db.all(
-                `SELECT * FROM watering_logs 
-                WHERE deviceId = ? 
-                ORDER BY timestamp DESC 
-                LIMIT ?`,
-                [deviceId, limit],
-                (err, rows) => {
-                    if (err) reject(err)
-                    else resolve(rows as WateringLog[])
-                },
-            )
-        })
+        configKey: ISprinklerConfig,
+        configValue: string,
+    ): Promise<void> {
+        return await db.put(
+            `sprinkler_config:${deviceId}:${configKey}`,
+            configValue,
+        )
     }
 
-    async getLogsByDateRange(
-        deviceId: string,
-        startDate: string,
-        endDate: string,
-    ): Promise<WateringLog[]> {
-        return new Promise((resolve, reject) => {
-            this.db.all(
-                `SELECT * FROM watering_logs 
-                WHERE deviceId = ? 
-                AND timestamp BETWEEN ? AND ?
-                ORDER BY timestamp DESC`,
-                [deviceId, startDate, endDate],
-                (err, rows) => {
-                    if (err) reject(err)
-                    else resolve(rows as WateringLog[])
-                },
-            )
-        })
+    static async updateLastseen(deviceId: string): Promise<void> {
+        return await db.put(`sprinkler_config:${deviceId}:lastseen`, Date())
     }
 
-    async getDevices(): Promise<WateringConfigWithLastseen[]> {
-        return new Promise((resolve, reject) => {
-            this.db.all(`SELECT * FROM device_config`, (err, rows) => {
-                if (err) reject(err)
-                else resolve(rows as WateringConfigWithLastseen[])
-            })
-        })
-    }
-
-    async cleanup(): Promise<void> {
-        return new Promise((resolve, reject) => {
-            this.db.close((err) => {
-                if (err) reject(err)
-                else resolve()
-            })
-        })
+    static async initialize(): Promise<void> {
+        // logger.info(`loading all device configs..`)
+        // const src = new EntryStream(db ,{
+        // }) as any
+        // src.on("data", logger.info)
+        // src.resume()
+        // console.log(src._readableState.length)
+        // if(src.length < 1) return
+        // const dst = new Writable({
+        //     write(chunk, encoding, callback) {
+        //         callback()
+        //     },
+        //     objectMode: true
+        // })
+        // pipeline(src, dst)
     }
 }
 
-// Create a single instance of the Database
-const db = new Database()
-
-// Handle cleanup on exit
-process.on("SIGINT", async () => {
-    await db.cleanup()
-    console.log("Database connection closed")
-    process.exit(0)
+db.on("open", () => {
+    logger.info("database open")
+    sprinklerDatabase.initialize()
 })
 
-export default db
+export class serverDatabase {
+    static isConfigured: boolean | null = null
+    static config: IServerInitConfig | null = null
+
+    static async checkIsConfiguredWithDatabase(): Promise<boolean> {
+        const serverInitKeys: Array<keyof IServerInitConfig> = [
+            "brokerUsername",
+            "brokerPassword",
+            "apiUsername",
+            "apiPassword",
+        ]
+        logger.debug("checking initial config with database")
+        try {
+            const currentConfigs = await db.getMany(serverInitKeys)
+            let isConfigured = true
+            for (const config of currentConfigs) {
+                if (config === undefined) {
+                    isConfigured = false
+                }
+            }
+            this.isConfigured = isConfigured
+
+            if (isConfigured) {
+                logger.info("server initialized")
+                this.config = {
+                    brokerUsername: await db.get("brokerUsername"),
+                    brokerPassword: await db.get("brokerPassword"),
+                    apiUsername: await db.get("apiUsername"),
+                    apiPassword: await db.get("apiPassword"),
+                }
+            }
+
+            return isConfigured
+        } catch {
+            return false
+        }
+    }
+
+    static async configure(config: IServerInitConfig): Promise<void> {
+        const isConfigured = await this.checkIsConfiguredWithDatabase()
+        if (isConfigured) throw new Error("database already configured")
+        let batch = db.batch()
+        Object.entries(config).forEach(([key, value]) => {
+            batch.put(key, String(value))
+        })
+        await batch.write()
+        await this.checkIsConfiguredWithDatabase()
+    }
+
+    static async checkIsConfigured(): Promise<boolean> {
+        if (this.isConfigured === null) {
+            return await this.checkIsConfiguredWithDatabase()
+        }
+        return this.isConfigured
+    }
+
+    static getConfig(): null | IServerInitConfig {
+        return this.config
+    }
+}
