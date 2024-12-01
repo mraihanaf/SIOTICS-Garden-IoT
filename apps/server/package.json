@@ -6,12 +6,12 @@
     "author": "mraihanaf <mraihanaf0@gmail.com>",
     "license": "MIT",
     "scripts": {
-        "test": "npx jest",
-        "build": "npx tsc",
+        "test": "jest",
+        "build": "tsc",
         "start": "node ./dist",
-        "dev:server": "npx nodemon ./src/index.ts | npx pino-pretty",
-        "dev:mocker": "npx nodemon ./src/__test__/mqttclient.ts | pino-pretty",
-        "dev": "npx concurrently --kill-others --names \"SERVER,MOCKER\" -c \"green.bold,blue.bold\" \"yarn run dev:server\" \"yarn run dev:mocker\""
+        "dev:server": "nodemon ./src/index.ts | pino-pretty",
+        "dev:mocker": "nodemon ./src/__test__/mqttclient.ts | pino-pretty",
+        "dev": "concurrently --kill-others --names \"SERVER,MOCKER\" -c \"green.bold,blue.bold\" \"yarn run dev:server\" \"yarn run dev:mocker\""
     },
     "dependencies": {
         "aedes": "^0.51.3",
