@@ -5,4 +5,4 @@ export interface IServerInitConfig {
     apiPassword: string // sha-512 hash (password:salt)
 }
 
-export type ISprinklerConfig = "durationInMs" | "cronExpression"
+export type ISprinklerConfig = "duration" | "cron"

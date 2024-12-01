@@ -1,25 +1,23 @@
-import Aedes, { Client, AuthenticateError, AuthErrorCode } from "aedes"
-import { config } from "dotenv"
+import Aedes, { AuthenticateError, AuthErrorCode, Client } from "aedes"
+import { aedesPersistenceLevel, serverDatabase } from "../utils/database"
+import { brokerAuth } from "../utils/auth"
 import { brokerLogger as logger } from "../utils/logger"
+import { clientValidator } from "../utils/validator"
+import { config } from "dotenv"
 import { IPublishPacket } from "mqtt"
+import { ISprinklerConfig } from "../types"
+import { topicParser } from "../utils/parser"
 import {
     SprinklerService,
+    SprinklerStatus,
+    statusPublisher,
     triggerSprinklerPublisher,
 } from "../utils/sprinklerBuilder"
-import { clientValidator } from "../utils/validator"
-import { topicParser } from "../utils/parser"
-import { serverDatabase, sprinklerDatabase } from "../utils/database"
-import { brokerAuth } from "../utils/auth"
-import { ISprinklerConfig } from "../types"
-
-import AaedesPersistence from "aedes-persistence-level"
-import { Level } from "level"
-
-const aedesPersistence = AaedesPersistence(new Level("./mydb"))
 
 config()
 /* garden/#
      sprinkler/{deviceId}/status (retained)
+     sprinkler/${deviceId}/
      sprinkler/{deviceId}/config/cron (retained)
      sprinkler/{deviceId}/config/duration (retained)
      sprinkler/{deviceId}/trigger (retained)
@@ -28,8 +26,10 @@ config()
      sprinkler/{deviceId}/system/logs
  */
 
+const onlineConfiguredClientIds: Set<string> = new Set()
+
 const broker: Aedes = new Aedes({
-    persistence: aedesPersistence,
+    persistence: aedesPersistenceLevel,
 })
 
 broker.on("client", (client: Client) => {
@@ -52,10 +52,22 @@ class AuthError extends Error implements AuthenticateError {
 broker.authenticate = async function (client, username, password, callback) {
     const isServerConfigured = await serverDatabase.checkIsConfigured()
     if (!isServerConfigured)
-        return callback(new AuthError("Server not initialized", 0), false)
+        return callback(
+            new AuthError(
+                "Server not initialized",
+                AuthErrorCode.SERVER_UNAVAILABLE,
+            ),
+            false,
+        )
     if (clientValidator.isWebsocketClient(client)) return callback(null, true)
     if (!brokerAuth.authenticate(username?.toString()!, password?.toString()!))
-        return callback(new AuthError("wrong username or password", 1), false)
+        return callback(
+            new AuthError(
+                "wrong username or password",
+                AuthErrorCode.BAD_USERNAME_OR_PASSWORD,
+            ),
+            false,
+        )
     return callback(null, true)
 }
 
@@ -66,11 +78,16 @@ broker.authorizePublish = function (client: Client | null, packet, callback) {
 }
 
 broker.on("clientDisconnect", async (client: Client) => {
-    if (clientValidator.isNotWebsocketClient(client)) {
-        new SprinklerService(client.id).clearRetainedMessage([
-            triggerSprinklerPublisher.topic,
-        ])
-        await sprinklerDatabase.updateLastseen(client.id)
+    if (clientValidator.isWebsocketClient(client)) return
+    const sprinkler = new SprinklerService(client.id)
+    if (onlineConfiguredClientIds.has(client.id)) {
+        sprinkler
+            .clearRetainedMessage([triggerSprinklerPublisher.topic])
+            .updateLastseen()
+            .publish()
+        onlineConfiguredClientIds.delete(client.id)
+    } else {
+        sprinkler.clearRetainedMessage([statusPublisher.topic])
     }
 })
 
@@ -98,6 +115,7 @@ export class publishPacketHandler {
         logger.debug(
             `${packet.topic} from ${client.id} with payload=${packet.payload.toString()}`,
         )
+
         const topic = topicParser.parse(packet.topic)
         switch (topic.type) {
             case "trigger":
@@ -107,18 +125,16 @@ export class publishPacketHandler {
                 logger.info(
                     `${client.id} ${topic.action} config set to ${packet.payload.toString()}`,
                 )
-                if (
-                    topic.action !== "durationInMs" &&
-                    topic.action !== "cronExpression"
-                )
+                if (topic.action !== "duration" && topic.action !== "cron")
                     return
                 topic.action as ISprinklerConfig
-                await sprinklerDatabase.setConfig(
-                    topic.deviceId,
-                    topic.action!,
-                    packet.payload.toString(),
-                )
                 break
+            case "status":
+                logger.info(
+                    `${client.id} ${topic.type} set to ${packet.payload.toString()}`,
+                )
+                if (packet.payload.toString() === SprinklerStatus.ALIVE)
+                    return onlineConfiguredClientIds.add(client.id)
         }
     }
 }

@@ -1,6 +1,7 @@
 import { Level } from "level"
 import logger from "./logger"
-import { ISprinklerConfig, IServerInitConfig } from "../types/database"
+import { IServerInitConfig } from "../types/database"
+import AedesPersistence from "aedes-persistence-level"
 
 const db = new Level("./database")
 
@@ -8,45 +9,9 @@ export class sprinklerDatabase {
     static async addWateringLogs(deviceId: string) {
         throw new Error("method not implemented yet.")
     }
-
-    static async setConfig(
-        deviceId: string,
-        configKey: ISprinklerConfig,
-        configValue: string,
-    ): Promise<void> {
-        return await db.put(
-            `sprinkler_config:${deviceId}:${configKey}`,
-            configValue,
-        )
-    }
-
-    static async updateLastseen(deviceId: string): Promise<void> {
-        return await db.put(`sprinkler_config:${deviceId}:lastseen`, Date())
-    }
-
-    static async initialize(): Promise<void> {
-        // logger.info(`loading all device configs..`)
-        // const src = new EntryStream(db ,{
-        // }) as any
-        // src.on("data", logger.info)
-        // src.resume()
-        // console.log(src._readableState.length)
-        // if(src.length < 1) return
-        // const dst = new Writable({
-        //     write(chunk, encoding, callback) {
-        //         callback()
-        //     },
-        //     objectMode: true
-        // })
-        // pipeline(src, dst)
-    }
 }
 
-db.on("open", () => {
-    logger.info("database open")
-    sprinklerDatabase.initialize()
-})
-
+export const aedesPersistenceLevel = AedesPersistence(db)
 export class serverDatabase {
     static isConfigured: boolean | null = null
     static config: IServerInitConfig | null = null
@@ -107,3 +72,12 @@ export class serverDatabase {
         return this.config
     }
 }
+
+const closeEvents = ["close", "SIGINT", "SIGQUIT", "SIGTERM"]
+
+closeEvents.forEach((event) => {
+    process.on(event, async () => {
+        logger.info("Process will be closed, closing the database...")
+        await db.close()
+    })
+})

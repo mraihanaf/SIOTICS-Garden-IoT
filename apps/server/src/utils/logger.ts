@@ -6,6 +6,7 @@ const logger: Logger = pino({
     level: process.env.LOG_LEVEL || "debug",
 })
 
-export const brokerLogger = logger.child({ type: "broker" })
-export const httpLogger = logger.child({ type: "http" })
+export const brokerLogger = logger.child({ service: "broker" })
+export const httpLogger = logger.child({ service: "http" })
+export const ntpLogger = logger.child({ service: "ntp" })
 export default logger

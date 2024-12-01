@@ -1,11 +1,11 @@
-import logger from "./utils/logger"
-import { config } from "dotenv"
 import broker from "./service/broker"
-import httpServer from "./service/http"
-import { createServer } from "net"
 import http from "http"
-import { createWebSocketStream, Server } from "ws"
+import httpServer from "./service/http"
+import logger from "./utils/logger"
 import ntpServer from "./service/ntp"
+import { config } from "dotenv"
+import { createServer } from "net"
+import { createWebSocketStream, Server } from "ws"
 import { serverDatabase } from "./utils/database"
 config()
 
