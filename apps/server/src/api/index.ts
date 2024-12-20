@@ -6,6 +6,7 @@ import swagger from "./swagger"
 import rateLimit from "express-rate-limit"
 import { config } from "dotenv"
 import initializeRouter from "./v1/initialize"
+import firmwareRouter from "./v1/firmware"
 
 config()
 const router: Router = Router()
@@ -14,7 +15,7 @@ const limiter = rateLimit({
     limit: 100,
 })
 const errorHandler: ErrorRequestHandler = (err, req, res, next) => {
-    logger.error(err) // Tambahkan logging untuk debugging
+    logger.error(err) // tambahkan logging untuk debugging
 
     res.sendFormatted({
         statusCode: Status.InternalError,
@@ -30,6 +31,7 @@ if (process.env.NODE_ENV === "development")
 router.use(json())
 
 router.use("/v1/initialize", initializeRouter)
+router.use("/v1/firmware", firmwareRouter)
 
 router.get("/v1", (req: Request, res: Response) => {
     logger.debug("someone just requested /api/v1")
