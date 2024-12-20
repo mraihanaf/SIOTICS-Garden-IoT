@@ -72,8 +72,8 @@ broker.authenticate = async function (client, username, password, callback) {
 }
 
 broker.authorizePublish = function (client: Client | null, packet, callback) {
-    if (clientValidator.isWebsocketClient(client))
-        return callback(new Error("websocket client not allowed to publish"))
+    // if (clientValidator.isWebsocketClient(client))
+    //     return callback(new Error("websocket client not allowed to publish"))
     return callback()
 }
 
