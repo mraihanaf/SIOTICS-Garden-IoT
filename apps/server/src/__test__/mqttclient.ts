@@ -19,7 +19,8 @@ let sprinklerConfig: ISprinklerConfig = {
     wateringDurationInMs: null,
     cronExpression: null,
 }
-let relayState = true // nyala == tutup keran
+let relayState = false
+let autoState = true
 let cronJob: CronJob | null = null
 
 function changeJob(
@@ -31,14 +32,15 @@ function changeJob(
     cronJob = new CronJob(
         cronExpression,
         () => {
-            // matikan relay (menyiram)
-            logger.info(
-                `matikan relay (menyiram).. selama ${wateringDurationInMs}ms`,
-            )
+            if (autoState)
+                return logger.info(
+                    `siram otomatis dibatalkan karena sedang menyiram manual`,
+                )
+            logger.info(`menyiram.. selama ${wateringDurationInMs}ms`)
             relayState = false
             client.publish(
-                `esp/${client.options.clientId}/watering/trigger`,
-                "off",
+                `sprinkler/${client.options.clientId}/trigger`,
+                "AUTO.ON",
             )
             setTimeout(() => {
                 logger.info(
@@ -46,8 +48,8 @@ function changeJob(
                 )
                 relayState = true
                 client.publish(
-                    `esp/${client.options.clientId}/watering/trigger`,
-                    "on",
+                    `sprinkler/${client.options.clientId}/trigger`,
+                    "AUTO.OFF",
                 )
             }, wateringDurationInMs)
         },
@@ -76,6 +78,11 @@ function configure(client: MqttClient): void {
     logger.info("device configured!")
 
     // configure device
+    changeJob(
+        sprinklerConfig.cronExpression!,
+        sprinklerConfig.wateringDurationInMs!,
+        client,
+    )
 }
 
 async function clientStart() {
@@ -122,7 +129,9 @@ async function clientStart() {
             retain: true,
         })
 
-        client.subscribe("sprinkler/test/#")
+        client.subscribe("sprinkler/test/#", {
+            qos: 1,
+        })
         client.on("message", (topic, payload, _packet) => {
             logger.debug(`${topic} with payload=${payload}`)
             switch (topic) {
@@ -136,8 +145,61 @@ async function clientStart() {
                     sprinklerConfig.cronExpression = payload.toString()
                     configure(client)
                     break
+                case "sprinkler/test/trigger":
+                    switch (payload.toString()) {
+                        case "MAN.ON":
+                            autoState = true
+                            logger.info("Siram manual diaktifkan.")
+                            client.publish(
+                                "sprinkler/test/status",
+                                "WATERING.MAN",
+                                {
+                                    retain: true,
+                                    qos: 1,
+                                },
+                            )
+                            break
+                        case "MAN.OFF":
+                            autoState = false
+                            logger.info("Siram manual dimatikan.")
+                            client.publish("sprinkler/test/status", "ALIVE", {
+                                retain: true,
+                                qos: 1,
+                            })
+                            break
+                        case "AUTO.ON":
+                            logger.info("Siram otomatis diaktifkan")
+                            client.publish(
+                                "sprinkler/test/status",
+                                "WATERING.AUTO",
+                                {
+                                    retain: true,
+                                    qos: 1,
+                                },
+                            )
+                            break
+                        case "AUTO.OFF":
+                            logger.info("Siram otomatis dimatikan")
+                            client.publish("sprinkler/test/status", "ALIVE", {
+                                retain: true,
+                                qos: 1,
+                            })
+                            break
+                    }
+                    break
             }
         })
+
+        setInterval(() => {
+            client.publish(
+                "sprinkler/test/sensors/temperature",
+                Math.floor(Math.random() * 100).toString(),
+            )
+            client.publish(
+                "sprinkler/test/sensors/humidity",
+                Math.floor(Math.random() * 100).toString(),
+            )
+        }, 1000)
         logger.info("connected to the broker")
     } catch (err) {
         logger.error(err)
