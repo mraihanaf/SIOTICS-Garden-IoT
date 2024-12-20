@@ -79,5 +79,6 @@ closeEvents.forEach((event) => {
     process.on(event, async () => {
         logger.info("Process will be closed, closing the database...")
         await db.close()
+        process.exit()
     })
 })
