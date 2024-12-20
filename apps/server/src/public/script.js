@@ -1,331 +1,269 @@
-// Utility functions
+const MQTT_BROKER_URL = `ws://${window.location.hostname}:8888`
+const client = mqtt.connect(MQTT_BROKER_URL)
+const deviceStatusMap = {
+    INIT: { text: "Inisialisasi", class: "bg-warning" },
+    ALIVE: { text: "Online", class: "bg-success" },
+    DEAD: { text: "Offline", class: "bg-danger" },
+    "WATERING.AUTO": { text: "Menyiram Otomatis", class: "bg-info" },
+    "WATERING.MAN": { text: "Menyiram Manual", class: "bg-primary" },
+}
 
-const fetchData = async (url) => {
-    try {
-        const response = await axios.get(url)
-        return response.data.data || []
-    } catch (error) {
-        console.error(`Error fetching data from ${url}:`, error)
-        return []
+class DeviceControl {
+    static trigger(deviceId, command) {
+        console.log(deviceId, command)
+        // MAN.ON || MAN.OFF
+        client.publish(`sprinkler/${deviceId}/trigger`, command, { qos: 1 })
+    }
+
+    static setCron(deviceId, cronExpression) {
+        client.publish(`sprinkler/${deviceId}/config/cron`, cronExpression, {
+            retain: true,
+            qos: 1,
+        })
+    }
+
+    static setDurationInMs(deviceId, durationInMs) {
+        client.publish(`sprinkler/${deviceId}/config/cron`, durationInMs, {
+            retain: true,
+            qos: 1,
+        })
     }
 }
 
-const promptCredentials = async () => {
-    const username = prompt("Enter your username:")
-    const password = prompt("Enter your password:")
-    return { username, password }
-}
-
-const updateDeviceStatus = (deviceId, data) => {
-    const deviceDiv = document.getElementById(`device-${deviceId}`)
-    if (deviceDiv) {
-        deviceDiv.querySelector(`#last-seen-${deviceId}`).textContent =
-            `Last Seen: ${new Date(data.date).toString()}`
-        deviceDiv.querySelector(`#cron-${deviceId}`).textContent =
-            `Cron Expression: ${data.cronExp} (${cronstrue.toString(data.cronExp, { locale: "id" })})`
-        deviceDiv.querySelector(`#duration-${deviceId}`).textContent =
-            `Watering Duration: ${data.wateringDurationInMs / 1000} detik`
-        deviceDiv.querySelector(`#status-${deviceId}`).textContent =
-            data.isWatering ? "Status: Menyiram" : "Status: Online"
+class DeviceManager {
+    constructor() {
+        this.charts = new Map()
+        this.devices = new Set()
     }
-}
 
-// Dialog Handling
-
-const openDeviceDialog = async () => {
-    const connectedDevices = await fetchData(
-        `${window.location.origin}/api/v1/getConnectedDevicesIds`,
-    )
-    const registeredDevices = await fetchData(
-        `${window.location.origin}/api/v1/getRegisteredDevices`,
-    )
-
-    const connectedUl = document.querySelector("#connected-device ul")
-    connectedUl.innerHTML = "" // Clear previous list
-
-    const registeredDeviceIds = registeredDevices.map(
-        (device) => device.deviceId,
-    )
-    const fragment = document.createDocumentFragment()
-
-    connectedDevices.forEach((deviceId) => {
-        if (!registeredDeviceIds.includes(deviceId)) {
-            const li = document.createElement("li")
-            li.innerHTML = `<input type="radio" name="device" value="${deviceId}">${deviceId}`
-            fragment.appendChild(li)
-        }
-    })
-
-    connectedUl.appendChild(fragment)
-    document.getElementById("connected-device").open = true
-}
-
-// Event Listeners
-
-const handleDeviceSelection = async () => {
-    const selectedDeviceId = document.querySelector(
-        "#connected-device input[type='radio']:checked",
-    )?.value
-    if (!selectedDeviceId) return alert("Please select a device.")
-
-    const { username, password } = await promptCredentials()
-    const payload = { deviceId: selectedDeviceId, username, password }
-
-    try {
-        const response = await axios.post(
-            `${window.location.origin}/api/v1/initDevice`,
-            payload,
-        )
-        if (response.status === 200) {
-            alert(`Device ${selectedDeviceId} initialized successfully.`)
-            window.location.reload()
-        } else {
-            alert(`Failed to initialize device: ${response.data.message}`)
-        }
-    } catch (error) {
-        console.error("Error initializing device:", error)
-        alert("Error initializing device. Please try again.")
+    createDeviceCard(deviceId) {
+        const template = `
+         <div class="col-md-12" id="device-${deviceId}">
+                <div class="card border-success">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Device ID: ${deviceId}</h5>
+                        <span class="badge bg-secondary">Offline</span>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-text mb-2">
+                            <strong>Terakhir Dilihat:</strong> None
+                        </p>
+                        <p class="card-text mb-2 watering-duration">
+                            <strong>Durasi Penyiraman:</strong> None
+                        </p>
+                        <p class="card-text mb-2 cron-expression">
+                            <strong>Terakhir dilihat:</strong> None
+                        </p>
+                        <div class="d-flex flex-wrap justify-content-between gap-2 mt-3">
+                            <button class="btn btn-primary btn-sm flex-grow-1 d-none start-btn">Siram</button>
+                            <button class="btn btn-warning btn-sm flex-grow-1 d-none stop-btn">Berhentikan Siram</button>
+                            <button class="btn btn-info btn-sm flex-grow-1 config-btn">Konfigurasi</button>                        
+                        </div>
+                        <div class="row">
+                            <div class="col-md-12">
+                                <div class="card">
+                                    <div class="card-header">
+                                        Sensor Data
+                                    </div>
+                                    <div class="card-body">
+                                        <canvas id="sensorChart-${deviceId}"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                 <div>
+            </div>
+        `
+        document
+            .getElementById("devices-container")
+            .insertAdjacentHTML("beforeend", template)
+        this.initializeChart(deviceId)
+        this.initializeControlButtons(deviceId)
+        this.devices.add(deviceId)
     }
-}
 
-const closeDeviceDialog = () => {
-    document.getElementById("connected-device").open = false
-}
+    initializeChart(deviceId) {
+        const ctx = document
+            .getElementById(`sensorChart-${deviceId}`)
+            .getContext("2d")
+        const sensorChart = new Chart(ctx, {
+            type: "line",
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: "Temperature (\u00B0C)",
+                        data: [],
+                        borderColor: "rgb(153, 153, 255)",
+                        backgroundColor: "rgb(153, 153, 255)",
+                    },
+                    {
+                        label: "Humidity (%)",
+                        data: [],
+                        borderColor: "rgb(54, 162, 235)",
+                        backgroundColor: "rgb(54, 162, 235)",
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                animation: {
+                    duration: 500,
+                },
+                plugins: {
+                    legend: {
+                        position: "top",
+                    },
+                },
+            },
+        })
 
-const triggerWatering = async (deviceId, action) => {
-    const { username, password } = await promptCredentials()
-    const payload = { deviceId, action, username, password }
+        this.charts.set(deviceId, sensorChart)
+    }
 
-    try {
-        const response = await axios.post(
-            `${window.location.origin}/api/v1/triggerWatering`,
-            payload,
-        )
-        if (response.status === 200) {
-            alert(
-                `Watering device ${deviceId} ${action === "off" ? "started" : "stopped"} successfully.`,
+    initializeControlButtons(deviceId) {
+        const deviceCard = document.getElementById(`device-${deviceId}`)
+        const startBtn = deviceCard.querySelector(".start-btn")
+        const stopBtn = deviceCard.querySelector(".stop-btn")
+        const configBtn = deviceCard.querySelector(".config-btn")
+
+        startBtn.addEventListener("click", () => {
+            DeviceControl.trigger(deviceId, "MAN.ON")
+        })
+
+        stopBtn.addEventListener("click", () => {
+            DeviceControl.trigger(deviceId, "MAN.OFF")
+        })
+
+        configBtn.addEventListener("click", () => {
+            const newCron = prompt("Masukkan ekspresi cron baru:")
+            if (newCron) {
+                DeviceControl.setCron(deviceId, newCron)
+            }
+
+            const newDuration = prompt(
+                "Masukkan durasi penyiraman baru (dalam milidetik):",
             )
-        } else {
-            alert("Failed to trigger watering action.")
+            if (newDuration) {
+                DeviceControl.setDurationInMs(deviceCard, newDuration)
+            }
+        })
+    }
+
+    updateDeviceStatus(deviceId, status) {
+        if (!this.devices.has(deviceId)) {
+            this.createDeviceCard(deviceId)
         }
-    } catch (error) {
-        console.error("Error triggering watering:", error)
-        alert("Error triggering watering action.")
-    }
-}
 
-const changeDeviceConfig = async (deviceId) => {
-    const newCronExpression = prompt("Enter new cron expression:")
-    const newWateringDuration = prompt("Enter new watering duration in ms:")
-
-    if (!newCronExpression || !newWateringDuration)
-        return alert("Invalid input.")
-
-    const { username, password } = await promptCredentials()
-    const payload = {
-        deviceId,
-        cronExpression: newCronExpression,
-        wateringDurationInMs: parseInt(newWateringDuration, 10),
-        username,
-        password,
-    }
-
-    try {
-        const response = await axios.post(
-            `${window.location.origin}/api/v1/setWatering`,
-            payload,
+        const statusBadge = document.querySelector(
+            `#device-${deviceId} .card-header span`,
         )
-        if (response.status === 200) {
-            alert(`Device ${deviceId} configuration updated.`)
-            window.location.reload()
-        } else {
-            alert(`Failed to update device: ${response.data.message}`)
+        const startButton = document.querySelector(
+            `#device-${deviceId} .start-btn`,
+        )
+        const stopButton = document.querySelector(
+            `#device-${deviceId} .stop-btn`,
+        )
+
+        const statusInfo = deviceStatusMap[status] || {
+            text: status,
+            class: "bg-secondary",
         }
-    } catch (error) {
-        console.error("Error updating device configuration:", error)
-        alert("Error updating device configuration.")
+        statusBadge.textContent = statusInfo.text
+        statusBadge.className = `badge ${statusInfo.class}`
+
+        startButton.classList.toggle(
+            "d-none",
+            status === "WATERING.MAN" || status === "WATERING.AUTO",
+        )
+        stopButton.classList.toggle(
+            "d-none",
+            status === "ALIVE" || status === "DEAD",
+        )
+    }
+
+    updateSensorData(deviceId, type, value) {
+        const chart = this.charts.get(deviceId)
+        if (!chart) return
+        const parsedValue = parseFloat(value)
+        if (isNaN(parsedValue)) {
+            console.error(
+                `invalid data for deviceId: ${deviceId} with type: ${type}  and value: ${value}`,
+            )
+            return
+        }
+
+        const now = new Date().toLocaleTimeString()
+
+        if (chart.data.labels.length >= 20) {
+            chart.data.labels.shift()
+            chart.data.datasets.map((dataset) => {
+                if (dataset.data.length >= 20) dataset.data.shift()
+            })
+        }
+
+        if (!chart.data.labels.includes(now)) {
+            chart.data.labels.push(now)
+        }
+
+        const datasetIndex = type === "temperature" ? 0 : 1
+        chart.data.datasets[datasetIndex].data.push(parsedValue)
+        chart.update()
+    }
+
+    updateDeviceConfig(deviceId, type, value) {
+        if (!this.devices.has(deviceId)) {
+            this.createDeviceCard(deviceId)
+        }
+        const deviceCard = document.getElementById(`device-${deviceId}`)
+
+        if (type === "cron") {
+            const cronText = deviceCard.querySelector(".cron-expression")
+            try {
+                cronText.innerHTML = `<strong>Cron Expression:</strong> ${value} <small class="text-muted">(${cronstrue.toString(value, { locale: "id" })})</small>`
+            } catch (error) {
+                cronText.innerHTML = `<strong>Cron Expression:</strong> ${value} <small class="text-danger">(Invalid)</small>`
+            }
+        } else if (type === "duration") {
+            const durationText = deviceCard.querySelector(".watering-duration")
+            durationText.innerHTML = `<strong>Durasi Penyiraman:</strong> ${value} milidetik`
+        }
     }
 }
 
-// UI Updates and MQTT Handling
+const brokerStatus = document.getElementById("broker-status")
 
-const createDeviceDiv = (device) => {
-    const div = document.createElement("div")
-    div.classList.add("devices")
-    div.id = `device-${device.deviceId}`
-
-    div.innerHTML = `
-      <h2>Device ID: ${device.deviceId}</h2>
-      <p id="cron-${device.deviceId}">Cron Expression: ${device.cronExpression} (${cronstrue.toString(device.cronExpression, { locale: "id" })})</p>
-      <p id="duration-${device.deviceId}">Watering Duration: ${device.wateringDurationInMs / 1000} detik</p>
-      <p id="last-seen-${device.deviceId}">Last Seen: ${new Date(device.lastSeen).toString()}</p>
-      <p id="status-${device.deviceId}">Status: Offline</p>
-      <div class="device-buttons">
-        <button class="siram-button" data-device-id="${device.deviceId}">Siram</button>
-        <button class="berhentikan-button" data-device-id="${device.deviceId}">Berhentikan Siram</button>
-        <button class="change-config-button" data-device-id="${device.deviceId}">Change Config</button>
-        <button class="view-logs-button" data-device-id="${device.deviceId}">View Logs</button>
-      </div>
-    `
-
-    document.body.appendChild(div)
-
-    // Attach event listeners (including new logs button)
-    div.querySelector(".siram-button").onclick = () =>
-        triggerWatering(device.deviceId, "off")
-    div.querySelector(".berhentikan-button").onclick = () =>
-        triggerWatering(device.deviceId, "on")
-    div.querySelector(".change-config-button").onclick = () =>
-        changeDeviceConfig(device.deviceId)
-    div.querySelector(".view-logs-button").onclick = () =>
-        showDeviceLogs(device.deviceId)
-}
-
-// MQTT Client Setup
-
-const client = mqtt.connect(`ws://${window.location.hostname}:8888`)
-
-// Store device heartbeat times
-const deviceHeartbeatTimes = {}
+const deviceManager = new DeviceManager()
 
 client.on("connect", () => {
-    document.getElementById("broker-status").innerText = "Terkoneksi"
-    document.getElementById("broker-status").classList.add("connected")
-})
+    brokerStatus.classList.remove("bg-danger")
+    brokerStatus.classList.add("bg-success")
+    brokerStatus.textContent = "Terhubung"
+    console.log("Connected to MQTT broker")
 
-client.on("close", () => {
-    document.getElementById("broker-status").innerText = "Terputus"
-    document.getElementById("broker-status").classList.remove("connected")
+    client.subscribe("sprinkler/#")
 })
 
 client.on("message", (topic, message) => {
-    const deviceId = topic.split("/")[1]
-    const data = JSON.parse(message.toString())
-    console.log(data)
+    const msg = message.toString()
+    const topicParts = topic.split("/")
+    const deviceId = topicParts[1]
 
-    if (topic.includes("heartbeat")) {
-        // Update heartbeat time for the device
-        deviceHeartbeatTimes[deviceId] = new Date(data.date)
-        updateDeviceStatus(deviceId, data)
-    }
-
-    if (topic.includes("watering/status")) {
-        alert(`Watering status for ${deviceId}: ${message}`)
+    if (topic.endsWith("/status")) {
+        deviceManager.updateDeviceStatus(deviceId, msg)
+    } else if (topic.includes("/config/")) {
+        const configType = topicParts[3]
+        deviceManager.updateDeviceConfig(deviceId, configType, msg)
+    } else if (topic.includes("/sensors/")) {
+        const sensorType = topicParts[3]
+        deviceManager.updateSensorData(deviceId, sensorType, msg)
     }
 })
 
-// Offline Devices Detection
-
-const checkDeviceHeartbeats = () => {
-    const now = Date.now()
-    Object.entries(deviceHeartbeatTimes).forEach(
-        ([deviceId, lastHeartbeat]) => {
-            const statusElem = document.querySelector(`#status-${deviceId}`)
-            if (now - lastHeartbeat > 3000) {
-                // If no heartbeat in the last 3 seconds
-                if (statusElem) {
-                    statusElem.textContent = "Status: Offline" // Mark device as offline
-                }
-            }
-        },
-    )
-}
-
-const fetchDeviceLogs = async (deviceId) => {
-    try {
-        const response = await axios.get(
-            `${window.location.origin}/api/v1/getWateringLogs/${deviceId}`,
-        )
-        return response.data.data || []
-    } catch (error) {
-        console.error(`Error fetching logs for device ${deviceId}:`, error)
-        return []
-    }
-}
-
-// New function to format timestamp
-const formatTimestamp = (timestamp) => {
-    return new Date(timestamp).toLocaleString()
-}
-
-// New function to create logs dialog
-const createLogsDialog = () => {
-    const dialog = document.createElement("dialog")
-    dialog.id = "logs-dialog"
-    dialog.innerHTML = `
-      <div class="logs-container">
-        <h2>Watering Logs</h2>
-        <div class="logs-content"></div>
-        <button class="close-logs">Close</button>
-      </div>
-    `
-    document.body.appendChild(dialog)
-
-    dialog.querySelector(".close-logs").onclick = () => dialog.close()
-    return dialog
-}
-
-// New function to show logs
-const showDeviceLogs = async (deviceId) => {
-    const logs = await fetchDeviceLogs(deviceId)
-    const dialog = document.getElementById("logs-dialog") || createLogsDialog()
-    const content = dialog.querySelector(".logs-content")
-
-    if (logs.length === 0) {
-        content.innerHTML =
-            '<p class="no-logs">No logs available for this device.</p>'
-    } else {
-        content.innerHTML = `
-        <table class="logs-table">
-          <thead>
-            <tr>
-              <th>Time</th>
-              <th>Duration</th>
-              <th>Type</th>
-              <th>Status</th>
-              <th>Reason</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${logs
-                .map(
-                    (log) => `
-              <tr>
-                <td>${formatTimestamp(log.timestamp)}</td>
-                <td>${log.wateringDurationInMs}ms</td>
-                <td>${log.isAutomated ? "Automated" : "Manual"}</td>
-                <td>${log.isEnabled ? "Enabled" : "Disabled"}</td>
-                <td>${log.reason}</td>
-              </tr>
-            `,
-                )
-                .join("")}
-          </tbody>
-        </table>
-      `
-    }
-
-    dialog.showModal()
-}
-
-// Main Function
-
-const main = async () => {
-    const registeredDevices = await fetchData(
-        `${window.location.origin}/api/v1/getRegisteredDevices`,
-    )
-
-    registeredDevices.forEach((device) => {
-        createDeviceDiv(device)
-        client.subscribe(`esp/${device.deviceId}/heartbeat`)
-        client.subscribe(`esp/${device.deviceId}/watering/status`)
-    })
-}
-
-// Initialize the app
-document.getElementById("add-devices").onclick = openDeviceDialog
-document.querySelector("#connected-device .cancel").onclick = closeDeviceDialog
-document.querySelector("#connected-device .add").onclick = handleDeviceSelection
-
-setInterval(checkDeviceHeartbeats, 1000)
-main()
+client.on("error", (err) => {
+    console.error("Connection error: ", err)
+    brokerStatus.classList.remove("bg-success")
+    brokerStatus.classList.add("bg-danger")
+    brokerStatus.textContent = "Terputus"
+})
