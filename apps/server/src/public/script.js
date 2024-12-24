@@ -13,7 +13,7 @@ class DeviceControl {
         console.log(deviceId, command)
         // MAN.ON || MAN.OFF
         client.publish(`sprinkler/${deviceId}/trigger`, command, { qos: 1 })
-    }
+    }   
 
     static setCron(deviceId, cronExpression) {
         client.publish(`sprinkler/${deviceId}/config/cron`, cronExpression, {
@@ -23,7 +23,7 @@ class DeviceControl {
     }
 
     static setDurationInMs(deviceId, durationInMs) {
-        client.publish(`sprinkler/${deviceId}/config/cron`, durationInMs, {
+        client.publish(`sprinkler/${deviceId}/config/duration`, durationInMs, {
             retain: true,
             qos: 1,
         })
@@ -44,33 +44,55 @@ class DeviceManager {
                         <h5 class="mb-0">Device ID: ${deviceId}</h5>
                         <span class="badge bg-secondary">Offline</span>
                     </div>
-                    <div class="card-body">
-                        <p class="card-text mb-2">
-                            <strong>Terakhir Dilihat:</strong> None
-                        </p>
-                        <p class="card-text mb-2 watering-duration">
-                            <strong>Durasi Penyiraman:</strong> None
-                        </p>
-                        <p class="card-text mb-2 cron-expression">
-                            <strong>Terakhir dilihat:</strong> None
-                        </p>
-                        <div class="d-flex flex-wrap justify-content-between gap-2 mt-3">
-                            <button class="btn btn-primary btn-sm flex-grow-1 d-none start-btn">Siram</button>
-                            <button class="btn btn-warning btn-sm flex-grow-1 d-none stop-btn">Berhentikan Siram</button>
-                            <button class="btn btn-info btn-sm flex-grow-1 config-btn">Konfigurasi</button>                        
-                        </div>
-                        <div class="row">
-                            <div class="col-md-12">
-                                <div class="card">
-                                    <div class="card-header">
-                                        Sensor Data
+                    <div class="card-body container-fluid d-flex flex-md-row flex-column">
+                        <div class ="container col-md-6 d-flex flex-column">
+                            <p class="card-text mb-2 flex-grow-1">
+                                <strong>Terakhir Dilihat:</strong><br> None
+                            </p>
+                            <p class="card-text mb-2 watering-duration flex-grow-1">
+                                <strong>Durasi Penyiraman:</strong><br> None
+                            </p>
+                            <p class="card-text mb-2 cron-expression flex-grow-1">
+                                <strong>Terakhir dilihat:</strong><br> None
+                            </p>
+                            <div class="container d-flex gap-5 justify-content-center align-items-center flex-grow-1 ">
+                                <div class="card col-md-4 p-2 border-0">
+                                    <img src="https://www.svgrepo.com/show/236207/thermometer-temperature.svg" alt="Temp-Image" class="image-fluid opacity-50">
+                                    <div class="card-body col-md-12 border-primary">
+                                        <p class="card-text mb-2 flex-grow-1 device-temp"><strong>Temperatur: </strong>None</p>
                                     </div>
-                                    <div class="card-body">
-                                        <canvas id="sensorChart-${deviceId}"></canvas>
+                                </div>
+                                <div class="card col-md-4 p-2 border-0">
+                                    <img src="https://www.svgrepo.com/show/120133/water-drop.svg" alt="Humid-Image" class="image-fluid opacity-50">
+                                    <div class="card-body col-md-12 border-secondary">
+                                        <p class="card-text mb-2 flex-grow-1 device-humid"><strong>Humidity: </strong>None</p>
                                     </div>
                                 </div>
                             </div>
+                            <div class="d-flex flex-wrap justify-content-center flex-column gap-2 mt-3">
+                                <button class="btn btn-primary btn-sm flex-grow-1 d-none start-btn">Siram</button>
+                                <button class="btn btn-warning btn-sm flex-grow-1 d-none stop-btn">Berhentikan Siram</button>
+                                <button class="btn btn-info btn-sm flex-grow-1 config-btn">Konfigurasi</button>                        
+                            </div>
                         </div>
+                        <div class ="container d-flex flex-column gap-2">
+                            <div class="card col-md-12">
+                                        <div class="card-header">
+                                            Temp Data
+                                        </div>
+                                        <div class="card-body">
+                                            <canvas id="tempChart-${deviceId}"></canvas>
+                                        </div>
+                                </div>
+                            <div class="card col-md-12">
+                                        <div class="card-header">
+                                            Humid Data
+                                        </div>
+                                        <div class="card-body">
+                                            <canvas id="humiChart-${deviceId}"></canvas>
+                                        </div>
+                            </div>
+                        </div>         
                     </div>
                  <div>
             </div>
@@ -84,10 +106,13 @@ class DeviceManager {
     }
 
     initializeChart(deviceId) {
-        const ctx = document
-            .getElementById(`sensorChart-${deviceId}`)
+        const tempCtx = document
+            .getElementById(`tempChart-${deviceId}`)
             .getContext("2d")
-        const sensorChart = new Chart(ctx, {
+        const humiCtx = document
+            .getElementById(`humiChart-${deviceId}`)
+            .getContext("2d")
+        const tempChart = new Chart(tempCtx, {
             type: "line",
             data: {
                 labels: [],
@@ -98,6 +123,25 @@ class DeviceManager {
                         borderColor: "rgb(153, 153, 255)",
                         backgroundColor: "rgb(153, 153, 255)",
                     },
+                ],
+            },
+            options: {
+                responsive: true,
+                animation: {
+                    duration: 500,
+                },
+                plugins: {
+                    legend: {
+                        position: "top",
+                    },
+                },
+            },
+        })
+        const humiChart = new Chart(humiCtx, {
+            type: "line",
+            data: {
+                labels: [],
+                datasets: [
                     {
                         label: "Humidity (%)",
                         data: [],
@@ -119,7 +163,7 @@ class DeviceManager {
             },
         })
 
-        this.charts.set(deviceId, sensorChart)
+        this.charts.set(deviceId, { tempChart, humiChart })
     }
 
     initializeControlButtons(deviceId) {
@@ -146,7 +190,7 @@ class DeviceManager {
                 "Masukkan durasi penyiraman baru (dalam milidetik):",
             )
             if (newDuration) {
-                DeviceControl.setDurationInMs(deviceCard, newDuration)
+                DeviceControl.setDurationInMs(deviceId, newDuration)
             }
         })
     }
@@ -184,8 +228,12 @@ class DeviceManager {
     }
 
     updateSensorData(deviceId, type, value) {
-        const chart = this.charts.get(deviceId)
-        if (!chart) return
+        const charts = this.charts.get(deviceId);
+        if (!charts) return;
+
+        const { tempChart, humiChart } = charts;
+        const chart = type === "temperature" ? tempChart : humiChart;
+
         const parsedValue = parseFloat(value)
         if (isNaN(parsedValue)) {
             console.error(
@@ -196,10 +244,10 @@ class DeviceManager {
 
         const now = new Date().toLocaleTimeString()
 
-        if (chart.data.labels.length >= 20) {
+        if (chart.data.labels.length >= 60) {
             chart.data.labels.shift()
             chart.data.datasets.map((dataset) => {
-                if (dataset.data.length >= 20) dataset.data.shift()
+                if (dataset.data.length >= 60) dataset.data.shift()
             })
         }
 
@@ -207,9 +255,36 @@ class DeviceManager {
             chart.data.labels.push(now)
         }
 
-        const datasetIndex = type === "temperature" ? 0 : 1
-        chart.data.datasets[datasetIndex].data.push(parsedValue)
+        chart.data.datasets[0].data.push(parsedValue)
         chart.update()
+    }
+
+    updateTextSensorData(deviceId, type, value) {
+        if (!this.devices.has(deviceId)) {
+            this.createDeviceCard(deviceId)
+        }
+        const deviceCard = document.getElementById(`device-${deviceId}`);
+        const parsedValue = parseFloat(value);
+    
+        if (isNaN(parsedValue)) {
+            console.error(
+                `Invalid data for deviceId: ${deviceId} with type: ${type} and value: ${value}`
+            );
+            return;
+        }
+    
+        if (type === "temperature") {
+            const tempText = deviceCard.querySelector('.device-temp');
+            if (tempText) {
+                tempText.innerHTML = `<strong>Temperatur: </strong>${parsedValue.toFixed(1)}°C`;
+            }
+        } else if (type === "humidity") {
+            const humidText = deviceCard.querySelector('.device-humid');
+            if (humidText) {
+                humidText.innerHTML = `<strong>Humidity: </strong>${parsedValue.toFixed(1)}%`;
+            }
+        }
+
     }
 
     updateDeviceConfig(deviceId, type, value) {
@@ -258,6 +333,8 @@ client.on("message", (topic, message) => {
     } else if (topic.includes("/sensors/")) {
         const sensorType = topicParts[3]
         deviceManager.updateSensorData(deviceId, sensorType, msg)
+        deviceManager.updateTextSensorData(deviceId, sensorType, msg)
+
     }
 })
 
